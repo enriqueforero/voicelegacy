@@ -1,0 +1,137 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicelegacy"
+version = "0.1.0"
+description = "Voice cloning pipeline for family legacy — XTTS-v2 + speakerscribe integration, optimized for Google Colab Free Tier (T4 GPU). Builds curated reference corpora from diarized interviews and synthesizes new speech in the target speaker's voice."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Néstor Enrique Forero Herrera", email = "enrique.economista@gmail.com"},
+]
+
+keywords = ["tts", "voice-cloning", "xtts", "coqui", "legacy", "family-archive", "speech-synthesis", "ai", "audio"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "coqui-tts>=0.27.0,<1.0",
+    "librosa>=0.10,<1.0",
+    "soundfile>=0.12,<1.0",
+    "noisereduce>=3.0,<4.0",
+    "pyloudnorm>=0.1,<1.0",
+    "pydantic>=2.5,<3.0",
+    "loguru>=0.7,<1.0",
+    "typer>=0.12,<1.0",
+    "rich>=13.7,<15.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "pytest-mock>=3.12", "ruff>=0.9.0", "mypy>=1.10"]
+
+[project.urls]
+Homepage      = "https://github.com/EnriqueForero/voicelegacy"
+Repository    = "https://github.com/EnriqueForero/voicelegacy"
+"Bug Tracker" = "https://github.com/EnriqueForero/voicelegacy/issues"
+Documentation = "https://github.com/EnriqueForero/voicelegacy"
+Changelog     = "https://github.com/EnriqueForero/voicelegacy/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where   = [".]
+include = ["voicelegacy*"]
+exclude = ["tests*", "notebooks*", "docs*"]
+
+[tool.setuptools.package-data]
+"voicelegacy" = ["py.typed"]
+
+
+# ═══════════════════════════════════════════════════════════
+# Pytest
+# ═══════════════════════════════════════════════════════════
+[tool.pytest.ini_options]
+testpaths    = ["tests"]
+python_files = ["test_*.py"]
+addopts      = "-v --tb=short --strict-markers --cov=voicelegacy --cov-report=term-missing --cov-report=xml --cov-fail-under=25"
+markers = [
+    "paridad: test de paridad binaria contra valores congelados",
+    "canario: test canario con datos externos (requiere variable de entorno)",
+    "smoke: test rapido end-to-end sobre golden_set.parquet",
+]
+
+
+# ═══════════════════════════════════════════════════════════
+# Coverage.py
+# ═══════════════════════════════════════════════════════════
+[tool.coverage.run]
+branch = true
+source = ["voicelegacy"]
+omit = [
+    "*/tests/*",
+    "*/dashboard.py",
+    "*/visualizacion*.py",
+    "*/visualizacion_interactiva.py",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+precision    = 1
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "def __str__",
+]
+
+
+# ═══════════════════════════════════════════════════════════
+# Ruff (linter + formatter)
+# ═══════════════════════════════════════════════════════════
+[tool.ruff]
+line-length    = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",
+    "B008",
+    "N806",
+    "SIM108",
+    "UP007",
+    "UP045",
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "N817",
+    "RUF012",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*/__init__.py" = ["F401"]
+"__init__.py" = ["F401"]
+"tests/*" = ["N802"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["voicelegacy"]
+
+[tool.ruff.format]
+quote-style  = "double"
+indent-style = "space"

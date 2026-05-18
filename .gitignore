@@ -1,0 +1,95 @@
+# ════════════════════════════════════════════════════════════════════
+# .gitignore — voicelegacy
+# Generado automáticamente por el notebook de publicación.
+# PRINCIPIO: solo va a git el CÓDIGO.
+# ════════════════════════════════════════════════════════════════════
+
+
+# ── Python ────────────────────────────────────────────────────────────
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+
+
+# ── Datos y archivos binarios ─────────────────────────────────────────
+*.coverage
+*.csv
+*.db
+*.flac
+*.gif
+*.ipynb
+*.jpeg
+*.jpg
+*.mp3
+*.mp4
+*.ogg
+*.onnx
+*.parquet
+*.pdf
+*.png
+*.pt
+*.pth
+*.wav
+*.xls
+*.xlsx
+*.zip
+
+
+# ── Carpetas excluidas ────────────────────────────────────────────────
+.cache/
+.eggs/
+.git/
+.ipynb_checkpoints/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+build/
+dist/
+env/
+interviews_raw/
+mnt/
+reference_corpus/
+speakerscribe_out/
+synthesis_out/
+venv/
+voicelegacy.egg-info/
+
+
+# ── Archivos específicos excluidos ────────────────────────────────────
+coverage.xml
+setup.cfg
+setup.py
+
+
+# ── Carpetas de trabajo personal ──────────────────────────────────────
+z. */
+z.*/
+
+
+# ── IDE ───────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+
+# ── Credenciales ──────────────────────────────────────────────────────
+.env
+.env.local
+secrets.json
+*_token.txt
+*.pem
+*.key
+
+
+# ── Excepciones (siempre incluir) ────────────────────────────────
+# Estas reglas DEBEN ser las últimas del archivo.
+# En .gitignore la última coincidencia gana; si una regla
+# de exclusión aparece después de una excepción, la anula.
+!notebooks/notebook_voicelegacy.ipynb
