@@ -1,0 +1,195 @@
+{
+  "generated_at": "2026-05-18T16:05:57+00:00",
+  "summary": {
+    "total_candidates": 12,
+    "passing": 3,
+    "top_selected": 3
+  },
+  "top_segments": [
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0007_00423.91.wav",
+      "duration_s": 6.32,
+      "sample_rate": 22050,
+      "rms_db": -26.99,
+      "peak_db": -5.19,
+      "snr_db": 5.55,
+      "score": 0.0291,
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0010_00627.02.wav",
+      "duration_s": 5.46,
+      "sample_rate": 22050,
+      "rms_db": -27.64,
+      "peak_db": -4.78,
+      "snr_db": 3.95,
+      "score": 0.0068,
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0001_00130.24.wav",
+      "duration_s": 4.82,
+      "sample_rate": 22050,
+      "rms_db": -24.38,
+      "peak_db": -2.8,
+      "snr_db": 4.21,
+      "score": 0.0049,
+      "passed": true,
+      "reasons": []
+    }
+  ],
+  "all_segments": [
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0000_00090.53.wav",
+      "duration_s": 8.74,
+      "sample_rate": 22050,
+      "rms_db": -23.66,
+      "peak_db": -1.78,
+      "snr_db": 2.49,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.5dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0001_00130.24.wav",
+      "duration_s": 4.82,
+      "sample_rate": 22050,
+      "rms_db": -24.38,
+      "peak_db": -2.8,
+      "snr_db": 4.21,
+      "score": 0.0049,
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0002_00194.98.wav",
+      "duration_s": 5.077,
+      "sample_rate": 22050,
+      "rms_db": -23.37,
+      "peak_db": -6.2,
+      "snr_db": 1.5,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 1.5dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0003_00244.70.wav",
+      "duration_s": 3.646,
+      "sample_rate": 22050,
+      "rms_db": -23.35,
+      "peak_db": -4.31,
+      "snr_db": 4.32,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "duration 3.65s < 4.0s"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0004_00257.70.wav",
+      "duration_s": 5.48,
+      "sample_rate": 22050,
+      "rms_db": -25.93,
+      "peak_db": -6.25,
+      "snr_db": 2.31,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.3dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0005_00263.11.wav",
+      "duration_s": 4.1,
+      "sample_rate": 22050,
+      "rms_db": -23.0,
+      "peak_db": -6.27,
+      "snr_db": 2.07,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.1dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0006_00303.11.wav",
+      "duration_s": 8.8,
+      "sample_rate": 22050,
+      "rms_db": -23.49,
+      "peak_db": -3.7,
+      "snr_db": 2.29,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.3dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0007_00423.91.wav",
+      "duration_s": 6.32,
+      "sample_rate": 22050,
+      "rms_db": -26.99,
+      "peak_db": -5.19,
+      "snr_db": 5.55,
+      "score": 0.0291,
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0008_00466.86.wav",
+      "duration_s": 5.43,
+      "sample_rate": 22050,
+      "rms_db": -26.11,
+      "peak_db": -4.91,
+      "snr_db": 2.9,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.9dB < 3.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0009_00550.05.wav",
+      "duration_s": 11.854,
+      "sample_rate": 22050,
+      "rms_db": -25.24,
+      "peak_db": -0.2,
+      "snr_db": 4.97,
+      "score": 0.0304,
+      "passed": false,
+      "reasons": [
+        "clipping risk: peak -0.2dBFS"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0010_00627.02.wav",
+      "duration_s": 5.46,
+      "sample_rate": 22050,
+      "rms_db": -27.64,
+      "peak_db": -4.78,
+      "snr_db": 3.95,
+      "score": 0.0068,
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-15 _Cita oftalmológica_0011_00632.38.wav",
+      "duration_s": 10.71,
+      "sample_rate": 22050,
+      "rms_db": -27.51,
+      "peak_db": -4.94,
+      "snr_db": 2.39,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.4dB < 3.0dB"
+      ]
+    }
+  ]
+}
