@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-05-20T02:50:36+00:00",
+  "summary": {
+    "total_candidates": 7,
+    "passing": 0,
+    "top_selected": 0,
+    "rejection_reason_counts": {
+      "snr 1.1dB < 15.0dB": 1,
+      "snr 2.0dB < 15.0dB": 1,
+      "snr 2.5dB < 15.0dB": 1,
+      "snr 3.2dB < 15.0dB": 1,
+      "snr 3.3dB < 15.0dB": 1,
+      "snr 3.4dB < 15.0dB": 1,
+      "snr 5.7dB < 15.0dB": 1
+    },
+    "warning_reason_counts": {}
+  },
+  "top_segments": [],
+  "all_segments": [
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0000_00130.61.wav",
+      "duration_s": 4.416,
+      "sample_rate": 22050,
+      "rms_db": -24.17,
+      "peak_db": -7.63,
+      "snr_db": 1.14,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 1.1dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0001_00305.27.wav",
+      "duration_s": 5.1,
+      "sample_rate": 22050,
+      "rms_db": -27.69,
+      "peak_db": -3.0,
+      "snr_db": 5.67,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 5.7dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0002_00653.33.wav",
+      "duration_s": 4.74,
+      "sample_rate": 22050,
+      "rms_db": -24.77,
+      "peak_db": -3.78,
+      "snr_db": 3.34,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 3.3dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0003_01109.45.wav",
+      "duration_s": 5.43,
+      "sample_rate": 22050,
+      "rms_db": -24.75,
+      "peak_db": -5.55,
+      "snr_db": 2.51,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.5dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0004_02223.33.wav",
+      "duration_s": 5.16,
+      "sample_rate": 22050,
+      "rms_db": -23.39,
+      "peak_db": -3.0,
+      "snr_db": 1.97,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 2.0dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0005_02234.69.wav",
+      "duration_s": 4.16,
+      "sample_rate": 22050,
+      "rms_db": -23.56,
+      "peak_db": -3.63,
+      "snr_db": 3.39,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 3.4dB < 15.0dB"
+      ]
+    },
+    {
+      "path": "/content/drive/MyDrive/Pruebas/voicelegacy/reference_corpus/2026-05-19 Comité Directivo Parte 3_0006_02252.07.wav",
+      "duration_s": 5.61,
+      "sample_rate": 22050,
+      "rms_db": -25.75,
+      "peak_db": -6.89,
+      "snr_db": 3.21,
+      "score": 0.0,
+      "passed": false,
+      "reasons": [
+        "snr 3.2dB < 15.0dB"
+      ]
+    }
+  ]
+}

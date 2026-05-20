@@ -71,3 +71,21 @@ class TestPipelineConfig:
         cfg = PipelineConfig(accept_coqui_tos=True)
         assert cfg.synthesis.language == "es"
         assert cfg.reference.target_speaker_label == "SPEAKER_00"
+
+
+def test_p1_reference_cleanup_defaults_are_enabled_safely() -> None:
+    cfg = ReferenceConfig()
+    assert cfg.apply_denoise is True
+    assert cfg.denoise_stationary is False
+    assert cfg.apply_bandpass_filter is True
+    assert cfg.apply_preemphasis_filter is False
+
+
+def test_p1_synthesis_defaults_are_reproducible() -> None:
+    cfg = SynthesisConfig()
+    assert cfg.seed == 42
+    assert cfg.compute_similarity is True
+    with pytest.raises(ValidationError):
+        SynthesisConfig(temperature=1.2)
+    with pytest.raises(ValidationError):
+        ReferenceConfig(target_loudness_lufs=-12.0)

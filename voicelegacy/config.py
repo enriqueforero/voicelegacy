@@ -64,6 +64,7 @@ SupportedLanguage = Literal[
 """Languages supported by XTTS-v2."""
 
 DeviceType = Literal["auto", "cuda", "cpu"]
+LongTextStrategy = Literal["auto", "single_pass", "coqui_split"]
 
 
 # ─── ReferenceConfig ───────────────────────────────────────────────
@@ -96,12 +97,67 @@ class ReferenceConfig(BaseModel):
     target_loudness_lufs: float = Field(
         default=-23.0,
         ge=-30.0,
-        le=-12.0,
-        description="EBU R128 target loudness for normalization.",
+        le=-16.0,
+        description=(
+            "EBU R128 target loudness for normalization. Acceptable range is "
+            "-30 to -16 LUFS. XTTS-v2 was trained near -23 to -18 LUFS — "
+            "values closer to -12 (commercial masters) destabilize the "
+            "conditioning encoder."
+        ),
     )
     apply_denoise: bool = Field(
         default=True,
         description="Apply spectral-gating noise reduction (noisereduce).",
+    )
+    denoise_stationary: bool = Field(
+        default=False,
+        description=(
+            "Use stationary spectral denoise. False enables adaptive non-stationary "
+            "denoise, which is usually safer for real interviews with changing noise."
+        ),
+    )
+    apply_bandpass_filter: bool = Field(
+        default=True,
+        description="Apply conservative 80-7600 Hz speech band-pass cleanup before denoise.",
+    )
+    apply_preemphasis_filter: bool = Field(
+        default=False,
+        description="Apply speech pre-emphasis before denoise; useful for muffled archival audio.",
+    )
+    enable_f0_outlier_filter: bool = Field(
+        default=True,
+        description=(
+            "Detect and drop target-speaker segments whose median fundamental "
+            "frequency is a robust outlier. This catches common diarization "
+            "mistakes where another speaker leaks into SPEAKER_00."
+        ),
+    )
+    min_segments_for_f0_filter: int = Field(
+        default=5,
+        ge=3,
+        le=100,
+        description="Minimum valid F0 measurements required before outlier filtering is applied.",
+    )
+    f0_outlier_mad_threshold: float = Field(
+        default=3.5,
+        ge=1.5,
+        le=10.0,
+        description=(
+            "Robust z-score threshold based on MAD. Larger values are less aggressive; "
+            "3.5 is a conservative production default."
+        ),
+    )
+    f0_min_hz: float = Field(
+        default=50.0,
+        ge=30.0,
+        le=200.0,
+        description="Lower bound passed to pitch estimation.",
+    )
+    f0_max_hz: float = Field(
+        default=500.0,
+        ge=200.0,
+        le=800.0,
+        description="Upper bound passed to pitch estimation.",
     )
     top_n_segments: int = Field(
         default=10,
@@ -147,8 +203,13 @@ class SynthesisConfig(BaseModel):
     temperature: float = Field(
         default=0.7,
         ge=0.1,
-        le=1.5,
-        description="XTTS sampling temperature. Lower = more stable, higher = more expressive.",
+        le=0.9,
+        description=(
+            "XTTS-v2 sampling temperature. Lower = more stable / mechanical, "
+            "higher = more expressive but risk of voice drift. The official "
+            "Coqui docs recommend 0.65-0.85 (https://docs.coqui.ai/en/latest/"
+            "models/xtts.html). Values >0.9 produce erratic, drifted output."
+        ),
     )
     length_penalty: float = Field(
         default=1.0,
@@ -172,7 +233,66 @@ class SynthesisConfig(BaseModel):
     )
     enable_text_splitting: bool = Field(
         default=True,
-        description="Auto-split long texts at sentence boundaries (recommended).",
+        description=(
+            "Legacy compatibility switch. If False, XTTS sentence splitting is always "
+            "disabled. If True, long_text_strategy decides when to split."
+        ),
+    )
+    long_text_strategy: LongTextStrategy = Field(
+        default="auto",
+        description=(
+            "How to handle long text. 'auto' avoids splitting short utterances to "
+            "reduce voice drift, but enables XTTS splitting for longer prose. "
+            "'single_pass' never splits. 'coqui_split' always delegates splitting "
+            "to XTTS/Coqui."
+        ),
+    )
+    max_single_pass_chars: int = Field(
+        default=240,
+        ge=80,
+        le=800,
+        description=(
+            "For long_text_strategy='auto', texts at or below this length are sent "
+            "as a single XTTS pass to reduce sentence-to-sentence drift."
+        ),
+    )
+    long_text_warning_chars: int = Field(
+        default=600,
+        ge=200,
+        le=5000,
+        description=(
+            "Emit sidecar/report warnings at or above this length because zero-shot "
+            "voice drift becomes more likely and manual listening is mandatory."
+        ),
+    )
+    seed: int | None = Field(
+        default=42,
+        description=(
+            "Random seed for reproducible synthesis. With the same (text, "
+            "references, config, seed) inputs, the output WAV must be "
+            "byte-identical. Set to None to disable seeding and accept "
+            "non-deterministic outputs (legacy behavior). XTTS-v2 sampling "
+            "is stochastic — without a seed, regenerating 'the same clip' "
+            "is impossible. For family-legacy use, a fixed seed means a "
+            "lost output WAV can always be recreated from its sidecar metadata."
+        ),
+    )
+    compute_similarity: bool = Field(
+        default=True,
+        description=(
+            "Try to score synthesized outputs against the reference corpus with "
+            "Resemblyzer. If the optional dependency is unavailable, synthesis still "
+            "succeeds and the sidecar records similarity_status='skipped'."
+        ),
+    )
+    cache_conditioning_latents: bool = Field(
+        default=True,
+        description=(
+            "When the underlying XTTS model API is available, compute and cache "
+            "speaker conditioning latents for a stable reference set. If the high-level "
+            "TTS wrapper does not expose the model API, voicelegacy falls back to "
+            "tts_to_file without failing."
+        ),
     )
 
 

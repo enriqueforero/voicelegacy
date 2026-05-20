@@ -148,3 +148,13 @@ def test_hash_text_is_unique_across_inputs(text: str, expected_change: bool) -> 
     baseline = hash_text("baseline")
     if expected_change:
         assert hash_text(text) != baseline
+
+
+def test_run_hash_includes_package_version(monkeypatch) -> None:
+    from voicelegacy import persistence
+
+    monkeypatch.setattr(persistence, "package_version", lambda: "0.1.0")
+    old = compute_run_hash("text", "refs", '{"a":1}')
+    monkeypatch.setattr(persistence, "package_version", lambda: "0.2.0")
+    new = compute_run_hash("text", "refs", '{"a":1}')
+    assert old != new

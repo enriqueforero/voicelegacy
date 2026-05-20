@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-05-20T02:56:00+00:00",
+  "recommended_sample_set": [
+    "clean_recording",
+    "moderate_noise",
+    "heavy_noise_or_crosstalk",
+    "phone_codec_or_low_sample_rate",
+    "long_interview_excerpt"
+  ],
+  "decision_rule": "DeepFilterNet should become default only if it improves listening quality and downstream speaker_similarity_score without adding speech artifacts.",
+  "candidates": [
+    {
+      "source_path": "/content/drive/MyDrive/Pruebas/voicelegacy/interviews_raw/2026-05-19 Comité Directivo Parte 3.wav",
+      "method": "noisereduce_nonstationary",
+      "status": "ok",
+      "output_path": "/content/drive/MyDrive/Pruebas/voicelegacy/reports/denoise_eval/2026-05-19_Comité_Directivo_Parte_3__noisereduce.wav",
+      "reason": null,
+      "stats": {
+        "duration_s": 3138.624036281179,
+        "sample_rate": 22050,
+        "n_channels": 1,
+        "rms_db": -31.336977246226937,
+        "peak_db": -3.0000002493010487,
+        "snr_db": 0.22604472854137042,
+        "dynamic_range_db": 0.22604472854137042
+      }
+    }
+  ]
+}

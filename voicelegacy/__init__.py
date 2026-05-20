@@ -31,6 +31,12 @@ from voicelegacy.config import (
     SynthesisConfig,
     WorkspacePaths,
 )
+from voicelegacy.finetuned_inference import (
+    FineTunedCheckpoint,
+    load_finetuned_model,
+    release_finetuned_model,
+    synthesize_with_finetuned,
+)
 from voicelegacy.logging_config import configure_logging, get_logger
 from voicelegacy.pipeline import (
     CorpusBuildResult,
@@ -40,38 +46,39 @@ from voicelegacy.pipeline import (
     run_synthesis,
 )
 from voicelegacy.quality import QualityReport, evaluate_file, rank_candidates
+from voicelegacy.similarity import SimilarityReport, compute_similarity
 from voicelegacy.synthesis import load_xtts_model, release_model
 
 __version__ = "0.1.0"
 
 __all__ = [
     "MAX_REF_DURATION_S",
-    # Constants
     "MIN_REF_DURATION_S",
     "MIN_SAMPLING_RATE_HZ",
     "MIN_SNR_DB",
     "MIN_USABLE_REFERENCE_SEGMENTS",
     "XTTS_INPUT_SR",
     "XTTS_OUTPUT_SR",
-    # Pipeline
     "CorpusBuildResult",
-    # Config
+    "FineTunedCheckpoint",
     "PipelineConfig",
-    # Quality
     "QualityReport",
     "ReferenceConfig",
+    "SimilarityReport",
     "SynthesisConfig",
     "SynthesisResult",
     "WorkspacePaths",
-    # Logging
+    "compute_similarity",
     "configure_logging",
     "evaluate_file",
     "get_logger",
-    # Synthesis
+    "load_finetuned_model",
     "load_xtts_model",
     "rank_candidates",
+    "release_finetuned_model",
     "release_model",
     "run_batch_synthesis",
     "run_reference_phase",
     "run_synthesis",
+    "synthesize_with_finetuned",
 ]

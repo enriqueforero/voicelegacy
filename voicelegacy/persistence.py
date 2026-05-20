@@ -10,6 +10,7 @@ This lets the notebook be re-run cheaply: only new inputs trigger work.
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata as metadata
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -101,9 +102,23 @@ def open_db(db_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 # ─── Synthesis records ─────────────────────────────────────────────
+def package_version() -> str:
+    """Return the installed voicelegacy version for cache invalidation."""
+    try:
+        return metadata.version("voicelegacy")
+    except metadata.PackageNotFoundError:
+        return "0.1.0"
+
+
 def compute_run_hash(text: str, reference_set_hash: str, config_json: str) -> str:
-    """Deterministic identifier for a (text, refs, config) tuple."""
+    """Deterministic identifier for a (text, refs, config, package version) tuple.
+
+    Including the package version prevents stale synthesis outputs from being
+    reused after the algorithm changes. That is deliberate cache invalidation.
+    """
     h = hashlib.sha256()
+    h.update(package_version().encode("utf-8"))
+    h.update(b"\x00")
     h.update(text.encode("utf-8"))
     h.update(b"\x00")
     h.update(reference_set_hash.encode("utf-8"))

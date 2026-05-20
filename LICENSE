@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Néstor Enrique Forero Herrera
+Copyright (c) 2026 Néstor Enrique Forero Herrera.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON THE XTTS-v2 MODEL:
-The XTTS-v2 model weights, which this software loads at runtime, are NOT
-covered by this MIT license. They are released under the Coqui Public Model
-License (CPML): https://coqui.ai/cpml
-Users must read and accept the CPML separately by setting
-`accept_coqui_tos=True` in their `PipelineConfig`.

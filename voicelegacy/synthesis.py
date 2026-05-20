@@ -4,6 +4,7 @@ Thin wrapper around `coqui-tts` (the Idiap fork) that:
 - Validates that CUDA / VRAM are available before model load.
 - Sets the COQUI_TOS_AGREED env var explicitly (user must accept CPML).
 - Caches the loaded model on the module level to avoid re-loading on every call.
+- Caches speaker conditioning latents when the lower-level XTTS API is exposed.
 - Frees VRAM on demand.
 
 Why the env var: XTTS-v2 weights are released under the Coqui Public Model
@@ -14,18 +15,25 @@ COQUI_TOS_AGREED=1 before loading. See: https://coqui.ai/cpml
 from __future__ import annotations
 
 import gc
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import soundfile as sf
+
 from voicelegacy.config import XTTS_OUTPUT_SR, SynthesisConfig
 from voicelegacy.logging_config import get_logger
+from voicelegacy.text_strategy import plan_text_synthesis
 
 logger = get_logger()
 
-# Module-level cache. The model is large (~2 GB on disk, 2-3 GB VRAM) and
-# expensive to instantiate. Reload only when explicitly requested.
+# Module-level caches. The model is large (~2 GB on disk, 2-3 GB VRAM) and
+# expensive to instantiate. Speaker conditioning latents are also expensive and
+# deterministic for a fixed reference set, so cache them across synthesis calls.
 _MODEL_CACHE: dict[str, Any] = {}
+_CONDITIONING_LATENTS_CACHE: dict[str, tuple[Any, Any]] = {}
 
 
 def _resolve_device(requested: str) -> str:
@@ -86,13 +94,10 @@ def load_xtts_model(config: SynthesisConfig, accept_tos: bool) -> Any:
 
 
 def release_model() -> None:
-    """Evict cached model(s) and free VRAM.
-
-    Call before switching to another large model or between very long
-    notebook sessions where Colab is reclaiming idle resources.
-    """
-    global _MODEL_CACHE
+    """Evict cached model(s), cached conditioning latents, and free VRAM."""
+    global _MODEL_CACHE, _CONDITIONING_LATENTS_CACHE
     _MODEL_CACHE.clear()
+    _CONDITIONING_LATENTS_CACHE.clear()
     gc.collect()
     try:
         import torch
@@ -100,9 +105,154 @@ def release_model() -> None:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
-        logger.info("Model released, VRAM freed.")
+        logger.info("Model and conditioning-latent caches released; VRAM freed.")
     except ImportError:
         pass
+
+
+def release_conditioning_latents() -> None:
+    """Evict cached XTTS conditioning latents without unloading the model."""
+    _CONDITIONING_LATENTS_CACHE.clear()
+    gc.collect()
+    logger.info("Conditioning-latent cache released.")
+
+
+def _apply_seed(seed: int | None) -> None:
+    """Set torch / numpy / random seeds before inference.
+
+    Centralized so the logic is testable without instantiating TTS. With
+    `seed=None` the function is a no-op (legacy non-deterministic behavior).
+    """
+    if seed is None:
+        return
+
+    import random
+
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        # Force deterministic algorithms where supported. This costs ~10-20%
+        # performance but guarantees byte-identical outputs across runs.
+        # Some XTTS-v2 operations may still be non-deterministic at the CUDA
+        # kernel level — those are out of our control.
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    except ImportError:
+        logger.debug("torch not installed — seeding numpy/random only")
+
+    logger.debug("Seeded inference with seed={}", seed)
+
+
+def _conditioning_cache_key(reference_wavs: list[str]) -> str:
+    """Build a stable key from reference paths plus file metadata."""
+    h = hashlib.sha256()
+    for raw in sorted(reference_wavs):
+        p = Path(raw)
+        stat = p.stat()
+        h.update(str(p.resolve()).encode("utf-8"))
+        h.update(str(stat.st_size).encode("ascii"))
+        h.update(str(stat.st_mtime_ns).encode("ascii"))
+    return h.hexdigest()
+
+
+def _extract_xtts_model(tts: Any) -> Any | None:
+    """Return lower-level XTTS model object if the high-level wrapper exposes it."""
+    model = getattr(tts, "synthesizer", None)
+    model = getattr(model, "tts_model", None)
+    if model is None:
+        return None
+    if not (hasattr(model, "get_conditioning_latents") and hasattr(model, "inference")):
+        return None
+    return model
+
+
+def _get_conditioning_latents_cached(model: Any, reference_wavs: list[str]) -> tuple[Any, Any]:
+    """Get or compute XTTS speaker conditioning latents for a reference set."""
+    key = _conditioning_cache_key(reference_wavs)
+    if key in _CONDITIONING_LATENTS_CACHE:
+        logger.info("Using cached XTTS conditioning latents: {}", key[:8])
+        return _CONDITIONING_LATENTS_CACHE[key]
+
+    logger.info(
+        "Computing XTTS conditioning latents for {} reference file(s)...", len(reference_wavs)
+    )
+    latents = model.get_conditioning_latents(audio_path=reference_wavs)
+    if not isinstance(latents, tuple) or len(latents) != 2:
+        raise RuntimeError("XTTS get_conditioning_latents returned an unexpected value")
+    _CONDITIONING_LATENTS_CACHE[key] = latents
+    return latents
+
+
+def _tensor_to_numpy_1d(wav: Any) -> np.ndarray:
+    """Convert XTTS output audio to a 1-D float32 numpy array."""
+    try:
+        import torch
+
+        if isinstance(wav, torch.Tensor):
+            wav = wav.detach().cpu().numpy()
+    except ImportError:
+        pass
+    arr = np.asarray(wav, dtype=np.float32).squeeze()
+    if arr.ndim != 1 or arr.size == 0:
+        raise RuntimeError("XTTS manual inference produced empty/non-1D audio")
+    return arr
+
+
+def _try_synthesize_with_conditioning_cache(
+    tts: Any,
+    text: str,
+    speaker_wav_list: list[str],
+    output_path: Path,
+    config: SynthesisConfig,
+) -> bool:
+    """Best-effort XTTS lower-level inference using cached conditioning latents.
+
+    Returns True when manual inference succeeded and wrote the WAV. Returns False
+    when the high-level TTS wrapper does not expose the model API. Exceptions from
+    an exposed but failing model are logged and also fall back to ``tts_to_file``.
+    """
+    if not config.cache_conditioning_latents:
+        return False
+
+    model = _extract_xtts_model(tts)
+    if model is None:
+        logger.debug("XTTS model API not exposed; falling back to tts_to_file.")
+        return False
+
+    try:
+        gpt_cond_latent, speaker_embedding = _get_conditioning_latents_cached(
+            model, speaker_wav_list
+        )
+        text_plan = plan_text_synthesis(text, config)
+        if text_plan.warning:
+            logger.warning("Text synthesis warning: {}", text_plan.warning)
+        out = model.inference(
+            text,
+            config.language,
+            gpt_cond_latent,
+            speaker_embedding,
+            temperature=config.temperature,
+            length_penalty=config.length_penalty,
+            repetition_penalty=config.repetition_penalty,
+            top_k=config.top_k,
+            top_p=config.top_p,
+            speed=config.speed,
+            enable_text_splitting=text_plan.xtts_split_sentences,
+        )
+        if not isinstance(out, dict) or "wav" not in out:
+            raise RuntimeError("XTTS manual inference did not return {'wav': ...}")
+        wav = _tensor_to_numpy_1d(out["wav"])
+        sf.write(str(output_path), wav, XTTS_OUTPUT_SR, subtype="PCM_16")
+        logger.info("Wrote {} with cached XTTS conditioning latents", output_path)
+        return True
+    except Exception as exc:
+        logger.warning("Cached-latent XTTS inference failed; falling back to tts_to_file: {}", exc)
+        return False
 
 
 def synthesize_to_file(
@@ -123,6 +273,8 @@ def synthesize_to_file(
             when you have multiple short clean segments.
         output_path: Where to write the output WAV.
         config: SynthesisConfig with language and decoder hyperparameters.
+            If config.seed is not None, applies it to torch / numpy / random
+            before inference for reproducible output.
 
     Returns:
         Path to the written file.
@@ -146,27 +298,44 @@ def synthesize_to_file(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Seed before inference — reproducibility for legacy outputs.
+    _apply_seed(config.seed)
+
+    text_plan = plan_text_synthesis(text, config)
+    if text_plan.warning:
+        logger.warning("Text synthesis warning: {}", text_plan.warning)
+
     logger.info(
-        "Synthesizing {} char(s) to {} with {} ref file(s)",
+        "Synthesizing {} char(s) to {} with {} ref file(s)  seed={}  split_sentences={}",
         len(text),
         output_path.name,
         len(speaker_wav_list),
+        config.seed,
+        text_plan.xtts_split_sentences,
     )
 
-    tts.tts_to_file(
+    used_latent_cache = _try_synthesize_with_conditioning_cache(
+        tts=tts,
         text=text,
-        file_path=str(output_path),
-        speaker_wav=speaker_wav_list if len(speaker_wav_list) > 1 else speaker_wav_list[0],
-        language=config.language,
-        split_sentences=config.enable_text_splitting,
-        # XTTS-v2 supports these decoder kwargs via the API:
-        temperature=config.temperature,
-        length_penalty=config.length_penalty,
-        repetition_penalty=config.repetition_penalty,
-        top_k=config.top_k,
-        top_p=config.top_p,
-        speed=config.speed,
+        speaker_wav_list=speaker_wav_list,
+        output_path=output_path,
+        config=config,
     )
+    if not used_latent_cache:
+        tts.tts_to_file(
+            text=text,
+            file_path=str(output_path),
+            speaker_wav=speaker_wav_list if len(speaker_wav_list) > 1 else speaker_wav_list[0],
+            language=config.language,
+            split_sentences=text_plan.xtts_split_sentences,
+            # XTTS-v2 supports these decoder kwargs via the API:
+            temperature=config.temperature,
+            length_penalty=config.length_penalty,
+            repetition_penalty=config.repetition_penalty,
+            top_k=config.top_k,
+            top_p=config.top_p,
+            speed=config.speed,
+        )
 
     logger.info("Wrote {} ({} Hz)", output_path, XTTS_OUTPUT_SR)
     return output_path

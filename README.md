@@ -1,170 +1,381 @@
 # voicelegacy
 
-> **Voice cloning pipeline for family legacy** — XTTS-v2 + speakerscribe integration, optimized for Google Colab Free Tier (T4 GPU).
+`voicelegacy` is a Python pipeline for building a curated XTTS-v2 reference corpus from diarized interview audio and synthesizing new speech in the target speaker's voice.
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Model License: CPML](https://img.shields.io/badge/Model_License-CPML-orange.svg)](https://coqui.ai/cpml)
+It is designed for family-archive / legacy use cases: preserve a voice from interviews, clean and rank usable segments, generate new audio, and keep an audit trail next to every synthesized WAV.
 
----
+This is not a magic voice-restoration product. If the source audio is noisy, phone-codec, clipped, badly diarized, or too short, the system should make that visible instead of pretending the clone is reliable.
 
-## What it does
+## What the pipeline does
 
-Takes diarized interview transcripts produced by [speakerscribe](https://github.com/EnriqueForero/speakerscribe), extracts the target speaker's clean speech segments, scores them, builds a curated reference corpus, and uses [XTTS-v2 (coqui-tts fork)](https://github.com/idiap/coqui-ai-TTS) to synthesize new audio in that voice.
+1. Reads `speakerscribe` JSON diarization output.
+2. Finds the target speaker, usually `SPEAKER_00`.
+3. Extracts candidate reference clips from the original interview audio.
+4. Applies conservative cleanup: band-pass, optional pre-emphasis, denoise, trim, loudness normalization with headroom.
+5. Rejects bad clips through quality gates: duration, source sample rate, dynamic range, clipping risk.
+6. Detects pitch/F0 outliers to reduce diarization contamination.
+7. Selects the top reference clips.
+8. Runs XTTS-v2 synthesis with reproducible seed and optional conditioning-latent cache.
+9. Writes a WAV plus a JSON sidecar containing version, config, references, source-quality metadata and optional speaker-similarity score.
+10. Provides `voicelegacy diagnose` so a new user can check whether their workspace/runtime is ready.
 
-```
-interviews_raw/*.mp3
-     │
-     ▼ (speakerscribe — separate project)
-speakerscribe_out/*.json
-     │
-     ▼  build_reference_corpus
-reference_corpus/*.wav  (cleaned + ranked top N segments)
-     │
-     ▼  run_synthesis
-synthesis_out/*.wav  (new audio in the target's voice)
-```
+## Hard limitations
 
----
+Zero-shot XTTS-v2 is highly sensitive to reference quality. Better code cannot fully rescue bad material.
 
-## ⚠️ Read this before you build anything
+Typical failure modes:
 
-### 1. The reference audio dominates everything
-XTTS-v2 is zero-shot voice cloning. The model is frozen. **The only thing you control is the reference audio quality.** Garbage in → garbage out, and "garbage" includes:
+- 8 kHz / phone-codec audio: rejected by default.
+- Clipped or aggressively compressed input: may be rejected or generate unstable voice.
+- Background noise, cross-talk, music, echo or multiple speakers: may reduce similarity.
+- Wrong speaker label in diarization: pollutes the reference corpus.
+- Too few clean reference segments: synthesis is blocked by default.
+- Long texts with automatic splitting: possible voice drift between sentences.
 
-- Phone-call recordings (8 kHz Opus/AMR codec): rejected by default. The model will faithfully clone the *codec compression*, not the voice.
-- Audio with background TV / chatter / overlapping speakers.
-- Clipped audio (peak above −1 dBFS).
-- Anything below 16 kHz sample rate.
+The output must still be listened to by a human. `speaker_similarity_score` is a triage metric, not a legal/biometric guarantee.
 
-### 2. Colab Free is for **inference only**, not training
-| Mode | Colab Free | Why |
-|---|---|---|
-| Zero-shot inference (this notebook) | ✅ Works | XTTS-v2 needs ~2–3 GB VRAM; T4 has 15 GB |
-| Fine-tuning XTTS-v2 | ❌ Forget it | Requires 12–24 h continuous GPU; Colab disconnects at 12 h and on idle |
+## License and model-use warning
 
-If zero-shot quality is insufficient, do fine-tuning on **RunPod, Lambda Labs, or Colab Pro+** — not Free.
+This repository code is MIT-licensed. XTTS-v2 model weights are not MIT-licensed. They are governed by the Coqui Public Model License (CPML): https://coqui.ai/cpml
 
-### 3. License obligations (CPML)
-The XTTS-v2 model weights are released under the **Coqui Public Model License**. You must explicitly accept it (`accept_coqui_tos=True` in `PipelineConfig`). For personal / family use this is fine. For commercial use, **read the license**: https://coqui.ai/cpml
-
-### 4. Ethical considerations
-A child interacting with the cloned voice of a deceased relative is non-trivial psychologically. Speak to a child psychologist before deployment. The strongest legacy is often the **archive of real recordings**, not synthetic speech that puts new words in the speaker's mouth.
-
-This tool does not police usage. The author assumes consent of the cloned subject has been obtained.
-
----
-
-## Quick start (Google Colab)
-
-Open `notebooks/notebook_voicelegacy.ipynb` and follow the cells. The full flow is:
+`voicelegacy` deliberately requires explicit acceptance before loading XTTS-v2:
 
 ```python
-from voicelegacy import (
-    PipelineConfig, ReferenceConfig, SynthesisConfig, WorkspacePaths,
-    run_reference_phase, run_synthesis,
-)
-
-paths = WorkspacePaths(workspace="/content/drive/MyDrive/Legado")
-paths.mkdirs()
-
-config = PipelineConfig(
-    reference=ReferenceConfig(target_speaker_label="SPEAKER_00", top_n_segments=10),
-    synthesis=SynthesisConfig(language="es"),
-    accept_coqui_tos=True,  # you've read https://coqui.ai/cpml
-)
-
-# Phase 1: build clean reference set from speakerscribe outputs
-corpus = run_reference_phase(paths, config)
-
-# Phase 2: synthesize
-result = run_synthesis(
-    text="Mi querido nieto, quiero contarte que la paciencia es la virtud más importante.",
-    reference_wavs=corpus.top_wavs,
-    paths=paths,
-    config=config,
-)
-print(result.output_path)
+PipelineConfig(accept_coqui_tos=True)
 ```
 
----
-
-## Workspace layout
-
-```
-workspace/                          ← root (Drive)
-├── interviews_raw/                 ← put raw audio here (mp3/wav/m4a/...)
-├── speakerscribe_out/              ← speakerscribe writes .json here
-├── reference_corpus/               ← voicelegacy writes clean WAVs here
-├── synthesis_out/                  ← cloned-voice outputs land here
-├── reports/                        ← per-run quality JSONs
-└── runs.db                         ← SQLite idempotency cache
-```
-
----
-
-## Installation (local development)
+or from CLI:
 
 ```bash
-git clone https://github.com/EnriqueForero/voicelegacy
+voicelegacy synthesize --workspace /path/to/workspace --text "Hola" --accept-tos
+```
+
+Do not use this software to impersonate, deceive, bypass consent, or create synthetic speech for a person who has not authorized that use.
+
+## Installation
+
+### Local development
+
+```bash
+git clone https://github.com/EnriqueForero/voicelegacy.git
 cd voicelegacy
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -e ".[dev]"
 pre-commit install
 ```
 
-PyTorch is not pinned — it ships pre-installed on Colab. For local installs:
+Optional speaker-similarity scoring:
 
 ```bash
-# CUDA 12.1 example; check pytorch.org for your hardware
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install -e ".[dev,similarity]"
 ```
 
----
+`similarity` installs Resemblyzer. The rest of the pipeline works without it; sidecars will record similarity as `skipped`.
 
-## CLI
+### Google Colab
+
+Recommended when running XTTS-v2 because it needs practical GPU access.
+
+```bash
+!apt-get update -qq && apt-get install -y -qq ffmpeg
+!pip install -e ".[dev,similarity]"
+```
+
+Then use `notebooks/notebook_voicelegacy.ipynb`, which is generated from `notebooks/build_notebook.py`. Do not hand-edit the notebook as the source of truth.
+
+## Workspace structure
+
+Create one workspace per person/project:
+
+```text
+workspace/
+├── interviews_raw/      # raw audio/video: wav, mp3, m4a, mp4, mkv, webm, aac, mov
+├── speakerscribe_out/   # diarization JSONs from speakerscribe
+├── reference_corpus/    # generated clean reference clips
+├── synthesis_out/       # generated WAVs + sidecar JSON files
+├── reports/             # quality/F0 reports
+└── runs.db              # idempotency cache
+```
+
+## First command to run
+
+```bash
+voicelegacy diagnose --workspace /path/to/workspace
+```
+
+Machine-readable output:
+
+```bash
+voicelegacy diagnose --workspace /path/to/workspace --json
+```
+
+`diagnose` checks Python, packages, FFmpeg, CUDA, CPML environment flag, model config, required workspace folders, raw media, speakerscribe JSON schema validity, reference corpus, reports, outputs and `runs.db`.
+
+## CLI usage
+
+### Convert raw media to WAV
+
+```bash
+voicelegacy convert-audio --workspace /path/to/workspace
+```
+
+### Inspect speaker labels
+
+```bash
+voicelegacy list-speakers --workspace /path/to/workspace
+```
+
+Use this before choosing the `--speaker` value.
+
+### Build reference corpus
 
 ```bash
 voicelegacy build-corpus \
-  --workspace ~/Drive/Legado \
+  --workspace /path/to/workspace \
   --speaker SPEAKER_00 \
   --top-n 10 \
-  --accept-tos
-
-voicelegacy synthesize \
-  --workspace ~/Drive/Legado \
-  --text "Hola mi nieto, hoy te quiero contar..." \
+  --min-dur 4 \
+  --max-dur 15 \
+  --min-snr 15 \
   --accept-tos
 ```
 
----
-
-## Architecture
-
-```
-voicelegacy/
-├── config.py       ← Pydantic v2 models (single source of truth)
-├── audio.py        ← load / normalize / denoise / trim / slice
-├── quality.py      ← per-segment SNR/duration scoring + ranking
-├── corpus.py       ← parse speakerscribe JSON → extract → write WAVs
-├── synthesis.py    ← XTTS-v2 wrapper (TOS handling, VRAM mgmt)
-├── persistence.py  ← SQLite cache for idempotent re-runs
-├── pipeline.py     ← orchestrates phase 1 (corpus) + phase 2 (synthesis)
-└── cli.py          ← Typer CLI
-```
-
----
-
-## Testing
+Force rebuild without losing manual cleanup work:
 
 ```bash
-pytest                # full suite
-pytest -m "not gpu"   # skip GPU-required tests
-pytest --cov          # with coverage report
+voicelegacy build-corpus --workspace /path/to/workspace --force --accept-tos
 ```
 
----
+Existing WAVs are moved to `reference_corpus_backup_YYYYMMDDTHHMMSSZ/` before rebuilding.
 
-## License
+### Synthesize one text
 
-- **Code (this repository)**: MIT.
-- **Model weights (XTTS-v2)**: Coqui Public Model License — https://coqui.ai/cpml — accepted at runtime by the user.
+```bash
+voicelegacy synthesize \
+  --workspace /path/to/workspace \
+  --text "Hola, este es un mensaje de prueba." \
+  --accept-tos
+```
+
+### Synthesize from TXT
+
+One utterance per non-empty line:
+
+```bash
+voicelegacy synthesize \
+  --workspace /path/to/workspace \
+  --text-file textos.txt \
+  --accept-tos
+```
+
+### Synthesize from CSV
+
+Use a column named `text`, or a single-column CSV:
+
+```bash
+voicelegacy synthesize \
+  --workspace /path/to/workspace \
+  --text-file textos.csv \
+  --accept-tos
+```
+
+## Python usage
+
+```python
+from pathlib import Path
+
+from voicelegacy.config import PipelineConfig, ReferenceConfig, SynthesisConfig, WorkspacePaths
+from voicelegacy.pipeline import run_reference_phase, run_synthesis
+
+paths = WorkspacePaths(workspace=Path("/content/drive/MyDrive/voicelegacy_ws"))
+config = PipelineConfig(
+    accept_coqui_tos=True,
+    reference=ReferenceConfig(target_speaker_label="SPEAKER_00"),
+    synthesis=SynthesisConfig(language="es", seed=42),
+)
+
+corpus = run_reference_phase(paths, config)
+result = run_synthesis("Hola, este es un mensaje de prueba.", corpus.top_wavs, paths, config)
+print(result.output_path)
+print(result.metadata_path)
+```
+
+## Interpreting `speaker_similarity_score`
+
+If `voicelegacy[similarity]` is installed, each synthesized WAV sidecar may include a similarity report using Resemblyzer: https://github.com/resemble-ai/Resemblyzer
+
+Informal bands:
+
+| Score | Band | Interpretation |
+|---:|---|---|
+| `>= 0.85` | very_high | Strong same-speaker signal; still listen manually. |
+| `0.75–0.85` | high | Usually acceptable for zero-shot legacy use. |
+| `0.60–0.75` | marginal | Review carefully; possible drift/noise/contamination. |
+| `< 0.60` | low | Treat as failed clone until proven otherwise. |
+
+Low score actions:
+
+1. Review `reports/reference_quality_*.json`.
+2. Review `reports/f0_outliers_*.json`.
+3. Run `voicelegacy list-speakers` to confirm target label.
+4. Collect cleaner recordings or adjust diarization.
+5. Consider denoising/fine-tuning only after source quality is understood.
+
+## Quality metadata in sidecars
+
+Each synthesized WAV has a sibling `.json` sidecar with:
+
+- `voicelegacy_version`
+- `run_hash`
+- `reference_set_hash`
+- `reference_wavs`
+- `synthesis_config`
+- `reference_config`
+- `source_quality`
+- `similarity`
+- `speaker_similarity_score`
+
+If `source_quality.degraded_mode` is `true`, do not treat the WAV as production-quality without manual review.
+
+## Tests, lint and format
+
+```bash
+python -m ruff format --check .
+python -m ruff check .
+python -m pytest -q
+python notebooks/build_notebook.py
+```
+
+The release-candidate bar is:
+
+- ruff format passes.
+- ruff lint passes.
+- pytest passes.
+- coverage floor: 75%.
+- notebook regenerates and validates.
+- `pyproject.toml` parses.
+
+## GitHub Actions
+
+CI runs on pushes and pull requests:
+
+1. Install package with dev dependencies.
+2. Validate `pyproject.toml`.
+3. Regenerate/validate notebook.
+4. Run `ruff format --check`.
+5. Run `ruff check`.
+6. Run `pytest` with coverage.
+
+The CI intentionally does not download XTTS-v2 weights or run GPU inference. XTTS calls are mocked in tests.
+
+## Troubleshooting
+
+### `No reference WAVs found`
+
+Run:
+
+```bash
+voicelegacy build-corpus --workspace /path/to/workspace --accept-tos
+```
+
+Then check `reference_corpus/` and `reports/reference_quality_*.json`.
+
+### `Only 1 reference segment provided`
+
+The pipeline requires at least three usable reference segments by default. Add more source material or improve diarization/cleanup.
+
+### `COQUI_TOS_AGREED is not set`
+
+Read CPML first: https://coqui.ai/cpml
+
+Then pass `--accept-tos` or set `accept_coqui_tos=True`.
+
+### `ffmpeg not on PATH`
+
+Install FFmpeg:
+
+```bash
+sudo apt-get install ffmpeg       # Debian/Ubuntu/Colab
+brew install ffmpeg               # macOS
+choco install ffmpeg              # Windows Chocolatey
+```
+
+### Similarity is skipped
+
+Install the optional dependency:
+
+```bash
+pip install -e ".[similarity]"
+```
+
+### Similarity is low
+
+Do not tune blindly. First inspect whether the reference set is contaminated, noisy, clipped, too short or diarized under the wrong speaker label.
+
+## Release status
+
+Current status: release candidate for GitHub testing. It is suitable for technical users who understand CPML, consent requirements and zero-shot cloning limitations. It is not yet a packaged PyPI release.
+
+## P3 product hardening
+
+### Denoise evaluation before changing defaults
+
+DeepFilterNet is not enabled by default. It is an optional evaluation path because aggressive enhancement can improve perceived noise while damaging speaker identity.
+
+Install optional support:
+
+```bash
+pip install -e ".[deepfilter]"
+```
+
+Run the evaluation harness on real samples:
+
+```bash
+voicelegacy evaluate-denoise \
+  --workspace /path/to/workspace \
+  --audio clean.wav \
+  --audio moderate_noise.wav \
+  --audio heavy_noise.wav \
+  --audio phone_codec.wav \
+  --audio long_interview_excerpt.wav \
+  --deepfilter
+```
+
+The command writes enhanced candidates and `reports/denoise_eval/denoise_evaluation_*.json`. DeepFilterNet should become a production default only if it improves human listening quality and downstream `speaker_similarity_score` without adding artifacts.
+
+### Long text strategy
+
+`SynthesisConfig` exposes an explicit long-text policy:
+
+```python
+SynthesisConfig(
+    long_text_strategy="auto",      # "auto", "single_pass", or "coqui_split"
+    max_single_pass_chars=240,
+    long_text_warning_chars=600,
+)
+```
+
+The default `auto` policy sends short text as one XTTS pass to reduce sentence-to-sentence drift, and delegates splitting to XTTS only for longer prose. Every output sidecar includes `text_plan` so this decision is auditable.
+
+### Ethics and release documentation
+
+See:
+
+- `docs/ETHICS.md`
+- `docs/P3_EVALUATION.md`
+- `docs/RELEASE.md`
+
+The short version: do not clone a person's voice without consent, do not use outputs to deceive or impersonate, and do not separate generated WAVs from their JSON sidecars.
+
+## Packaging and PyPI
+
+The release workflow builds artifacts on tags and creates a draft GitHub release. It does **not** publish to PyPI automatically. PyPI publication requires manual workflow dispatch with `publish_pypi=true` and a configured PyPI Trusted Publisher.
+
+Relevant official references:
+
+- Python packaging guide: https://packaging.python.org/tutorials/packaging-projects/
+- PyPI Trusted Publishing: https://docs.pypi.org/trusted-publishers/
+- DeepFilterNet: https://github.com/Rikorose/DeepFilterNet
+- Coqui Public Model License: https://coqui.ai/cpml

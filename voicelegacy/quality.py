@@ -17,7 +17,9 @@ from voicelegacy.config import (
     MAX_REF_DURATION_S,
     MIN_REF_DURATION_S,
     MIN_SAMPLING_RATE_HZ,
+    MIN_SNR_DB,
     XTTS_INPUT_SR,
+    ReferenceConfig,
 )
 from voicelegacy.logging_config import get_logger
 
@@ -53,7 +55,7 @@ def score_segment(
     stats: AudioStats,
     min_duration_s: float = MIN_REF_DURATION_S,
     max_duration_s: float = MAX_REF_DURATION_S,
-    min_snr_db: float = 15.0,
+    min_snr_db: float = MIN_SNR_DB,
     min_sr_hz: int = MIN_SAMPLING_RATE_HZ,
 ) -> tuple[float, bool, tuple[str, ...]]:
     """Score an audio segment against quality gates.
@@ -74,9 +76,12 @@ def score_segment(
 
     Args:
         stats: AudioStats from compute_stats.
-        min_duration_s: Hard floor.
-        max_duration_s: Hard ceiling.
-        min_snr_db: Hard floor for cleanliness.
+        min_duration_s: Hard floor on segment length, seconds.
+        max_duration_s: Hard ceiling on segment length, seconds.
+        min_snr_db: Hard floor for cleanliness in dB. Defaults to the
+            package-wide constant ``MIN_SNR_DB``; if you call this from a
+            pipeline with a ``ReferenceConfig`` you should pass
+            ``config.min_snr_db`` instead so there is a single source of truth.
         min_sr_hz: Hard floor — reject phone-codec audio.
 
     Returns:
@@ -115,9 +120,11 @@ def score_segment(
 
 def evaluate_file(
     path: Path,
-    min_duration_s: float = MIN_REF_DURATION_S,
-    max_duration_s: float = MAX_REF_DURATION_S,
-    min_snr_db: float = 15.0,
+    config: ReferenceConfig | None = None,
+    *,
+    min_duration_s: float | None = None,
+    max_duration_s: float | None = None,
+    min_snr_db: float | None = None,
     min_sr_hz: int = MIN_SAMPLING_RATE_HZ,
     target_sr: int = XTTS_INPUT_SR,
 ) -> QualityReport:
@@ -125,23 +132,54 @@ def evaluate_file(
 
     Args:
         path: Path to audio file.
-        min_duration_s: Min duration in seconds.
-        max_duration_s: Max duration in seconds.
-        min_snr_db: Min SNR in dB.
-        min_sr_hz: Min sample rate in Hz (rejects phone audio).
+        config: Optional :class:`ReferenceConfig`. When provided, the gating
+            thresholds (``min_segment_duration_s``, ``max_segment_duration_s``,
+            ``min_snr_db``) are read from it — a single source of truth shared
+            with the rest of the pipeline. Explicit keyword overrides still win,
+            which keeps the function usable from ad-hoc scripts that pass only
+            the thresholds they care about.
+        min_duration_s: Optional override of ``config.min_segment_duration_s``.
+            Defaults to :data:`MIN_REF_DURATION_S` when no config is given.
+        max_duration_s: Optional override of ``config.max_segment_duration_s``.
+            Defaults to :data:`MAX_REF_DURATION_S` when no config is given.
+        min_snr_db: Optional override of ``config.min_snr_db``. Defaults to
+            :data:`MIN_SNR_DB` when no config is given. There is NO literal
+            default inside this function — that is intentional to avoid the
+            three-source-of-truth bug the original code shipped with.
+        min_sr_hz: Hard floor for sample rate (rejects phone audio).
         target_sr: Sample rate to load at (analysis happens at this rate).
 
     Returns:
         QualityReport with score, passed flag, and reasons.
     """
     path = Path(path)
-    y = load_audio_mono(path, target_sr=target_sr)
-    stats = compute_stats(y, target_sr)
+    if config is not None:
+        effective_min_duration = (
+            min_duration_s if min_duration_s is not None else config.min_segment_duration_s
+        )
+        effective_max_duration = (
+            max_duration_s if max_duration_s is not None else config.max_segment_duration_s
+        )
+        effective_min_snr = min_snr_db if min_snr_db is not None else config.min_snr_db
+    else:
+        effective_min_duration = (
+            min_duration_s if min_duration_s is not None else MIN_REF_DURATION_S
+        )
+        effective_max_duration = (
+            max_duration_s if max_duration_s is not None else MAX_REF_DURATION_S
+        )
+        effective_min_snr = min_snr_db if min_snr_db is not None else MIN_SNR_DB
+
+    y, original_sr = load_audio_mono(path, target_sr=target_sr)
+    # Pass original_sr so AudioStats.sample_rate reflects the SOURCE rate, not
+    # the resampled rate. This is what makes the phone-codec hard gate
+    # (sample_rate < min_sr_hz) actually fire on 8 kHz input.
+    stats = compute_stats(y, target_sr, original_sr=original_sr)
     score, passed, reasons = score_segment(
         stats,
-        min_duration_s=min_duration_s,
-        max_duration_s=max_duration_s,
-        min_snr_db=min_snr_db,
+        min_duration_s=effective_min_duration,
+        max_duration_s=effective_max_duration,
+        min_snr_db=effective_min_snr,
         min_sr_hz=min_sr_hz,
     )
     return QualityReport(path=path, stats=stats, score=score, passed=passed, reasons=reasons)

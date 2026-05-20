@@ -7,11 +7,47 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ['--maxkb=4096']  # raised: the .ipynb itself is ~3 MB
+
+  # ─── voicelegacy-specific local hooks ──────────────────────────────
+  # These catch the specific failure modes we hit in production:
+  #   1. pyproject.toml broken with unclosed string (see SKILL §18.5).
+  #   2. notebook hand-edited with a live `runtime.unassign()` that kills
+  #      the Colab session on Run All.
+  #   3. notebook divergent from build_notebook.py.
+  #
+  # The hook bodies live in scripts/ as standalone files so they are
+  # actually testable and not fragile YAML-escaped one-liners. The
+  # previous inline version had embedded ':' that YAML parsed as mapping
+  # keys, which made `pre-commit run` exit with InvalidConfigError before
+  # any hook fired — silently disabling all custom protections.
+  - repo: local
+    hooks:
+      - id: validate-pyproject-toml
+        name: validate pyproject.toml is parseable TOML
+        entry: python scripts/check_pyproject_toml.py
+        language: system
+        files: ^pyproject\.toml$
+        pass_filenames: true
+
+      - id: validate-notebook-schema
+        name: validate notebook against nbformat schema
+        entry: python scripts/check_notebook_schema.py
+        language: python
+        files: ^notebooks/[^/]+\.ipynb$
+        pass_filenames: true
+        additional_dependencies: [nbformat]
+
+      - id: no-live-runtime-unassign
+        name: notebook must not contain executable runtime.unassign()
+        entry: python scripts/check_no_runtime_unassign.py
+        language: system
+        files: ^notebooks/[^/]+\.ipynb$
+        pass_filenames: true
