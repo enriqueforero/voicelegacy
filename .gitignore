@@ -100,3 +100,6 @@ secrets.json
 # En .gitignore la última coincidencia gana; si una regla
 # de exclusión aparece después de una excepción, la anula.
 !notebooks/notebook_voicelegacy.ipynb
+!notebooks/notebook_voicelegacy_bridge.ipynb
+!notebooks/notebook_voicelegacy_finetune.ipynb
+!notebooks/notebook_voicelegacy_finetune_standalone.ipynb
