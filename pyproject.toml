@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voicelegacy"
-version = "0.1.0"
+version = "0.4.0"
 description = "Voice cloning pipeline for family legacy — XTTS-v2 + speakerscribe integration, optimized for Google Colab Free Tier (T4 GPU). Builds curated reference corpora from diarized interviews and synthesizes new speech in the target speaker's voice."
 readme = "README.md"
 license = {text = "MIT"}

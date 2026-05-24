@@ -83,10 +83,15 @@ class ReferenceConfig(BaseModel):
         description="Speaker label in the speakerscribe JSON to extract (e.g. 'SPEAKER_00').",
     )
     min_segment_duration_s: float = Field(
-        default=4.0,
+        default=6.0,
         ge=1.0,
         le=60.0,
-        description="Drop segments shorter than this (too short = weak signal).",
+        description=(
+            "Drop segments shorter than this (too short = weak signal). "
+            "Default 6.0s matches MIN_REF_DURATION_S and the XTTS-v2 recommended "
+            "minimum reference length; shorter clips give the conditioning "
+            "encoder too little prosodic context."
+        ),
     )
     max_segment_duration_s: float = Field(
         default=15.0,
@@ -95,14 +100,14 @@ class ReferenceConfig(BaseModel):
         description="Drop segments longer than this (likely contains pauses or overlap).",
     )
     target_loudness_lufs: float = Field(
-        default=-23.0,
+        default=-20.0,
         ge=-30.0,
         le=-16.0,
         description=(
             "EBU R128 target loudness for normalization. Acceptable range is "
             "-30 to -16 LUFS. XTTS-v2 was trained near -23 to -18 LUFS — "
-            "values closer to -12 (commercial masters) destabilize the "
-            "conditioning encoder."
+            "default -20 sits in that band. Values closer to -12 (commercial "
+            "masters) destabilize the conditioning encoder."
         ),
     )
     apply_denoise: bool = Field(
@@ -160,10 +165,14 @@ class ReferenceConfig(BaseModel):
         description="Upper bound passed to pitch estimation.",
     )
     top_n_segments: int = Field(
-        default=10,
+        default=5,
         ge=1,
         le=100,
-        description="Keep only the N best-quality segments (by SNR + duration).",
+        description=(
+            "Keep only the N best-quality segments (by dynamic range + duration). "
+            "Default 5: a handful of excellent references beats many mediocre ones "
+            "for XTTS-v2 conditioning."
+        ),
     )
     min_snr_db: float = Field(
         default=MIN_SNR_DB,

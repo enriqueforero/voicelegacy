@@ -14,7 +14,6 @@
 
 
 # ── Datos y archivos binarios ─────────────────────────────────────────
-*.coverage
 *.csv
 *.db
 *.flac
@@ -53,6 +52,7 @@ env/
 interviews_raw/
 mnt/
 reference_corpus/
+reports/
 speakerscribe_out/
 synthesis_out/
 venv/
@@ -60,6 +60,10 @@ voicelegacy.egg-info/
 
 
 # ── Archivos específicos excluidos ────────────────────────────────────
+.coverage
+Consolidador_Codigo_VoiceLegacy.ipynb
+PROGRESS.md
+Publicacion_GitHub_VoiceLegacy.ipynb
 coverage.xml
 setup.cfg
 setup.py
@@ -68,6 +72,9 @@ setup.py
 # ── Carpetas de trabajo personal ──────────────────────────────────────
 z. */
 z.*/
+
+backup_*/
+reference_corpus_backup_*/
 
 
 # ── IDE ───────────────────────────────────────────────────────────────

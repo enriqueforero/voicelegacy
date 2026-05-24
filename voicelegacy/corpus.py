@@ -425,12 +425,16 @@ def extract_segments_to_wav(
             logger.warning("Bad segment bounds, skipping: {}", exc)
             continue
 
+        # Cleanup order matters: denoise FIRST so noisereduce estimates the
+        # noise profile from the full spectrum, THEN band-limit, THEN
+        # pre-emphasis. Band-passing before denoise would starve the noise
+        # estimator of the high/low bands it needs to model the noise floor.
+        if config.apply_denoise:
+            y_seg = denoise(y_seg, target_sr, stationary=config.denoise_stationary)
         if config.apply_bandpass_filter:
             y_seg = apply_bandpass(y_seg, target_sr)
         if config.apply_preemphasis_filter:
             y_seg = apply_preemphasis(y_seg)
-        if config.apply_denoise:
-            y_seg = denoise(y_seg, target_sr, stationary=config.denoise_stationary)
 
         y_seg = trim_silence(y_seg)
         if y_seg.size < int(target_sr * 1.0):  # less than 1s after trim — drop
@@ -441,6 +445,13 @@ def extract_segments_to_wav(
 
         out_path = out_dir / f"{seg.source_audio.stem}_{idx:04d}_{seg.start_s:08.2f}.wav"
         save_wav(out_path, y_seg, target_sr)
+        # Write a transcript sidecar next to the WAV. This makes WAV<->text
+        # pairing robust: downstream (fine-tuning dataset prep) reads the
+        # sidecar instead of parsing the filename, which previously caused a
+        # silent mismatch when the naming scheme drifted. Empty text => no
+        # sidecar (segment had no transcription).
+        if seg.text and seg.text.strip():
+            out_path.with_suffix(".txt").write_text(seg.text.strip(), encoding="utf-8")
         written.append(out_path)
 
     logger.info("Wrote {} reference WAVs to {}", len(written), out_dir)

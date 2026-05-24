@@ -227,7 +227,7 @@ def apply_bandpass(
     y: np.ndarray,
     sr: int,
     low_hz: float = 80.0,
-    high_hz: float = 7600.0,
+    high_hz: float = 10000.0,
     order: int = 4,
 ) -> np.ndarray:
     """Apply a conservative Butterworth band-pass filter for speech cleanup.

@@ -6,6 +6,79 @@ It is designed for family-archive / legacy use cases: preserve a voice from inte
 
 This is not a magic voice-restoration product. If the source audio is noisy, phone-codec, clipped, badly diarized, or too short, the system should make that visible instead of pretending the clone is reliable.
 
+## Cómo empezar (guía de inicio)
+
+Hay dos caminos según tu material. Todo corre en Google Colab Free (GPU T4).
+
+### Camino 1 — Tienes UNA grabación de monólogo (una sola voz)
+
+Usa `notebook_voicelegacy_finetune_standalone.ipynb`. Parte de un solo archivo
+de audio y hace todo: transcribe (faster-whisper), segmenta, limpia, entrena
+XTTS-v2 y compara contra el modelo base. No necesitas nada más.
+
+### Camino 2 — Tienes MUCHAS entrevistas con varias personas (caso típico de legado)
+
+Esta es una cadena de dos librerías. Cada paso es un notebook:
+
+```
+PASO 1  speakerscribe              →  diariza + transcribe cada entrevista
+        (notebook_speakerscribe)       produce un .json por entrevista
+                                       (quién habló, qué dijo, cuándo)
+            │
+PASO 2  notebook_voicelegacy_bridge   →  identificas a tu persona objetivo por
+                                          entrevista (escuchando), extrae SOLO
+                                          su voz, valida coherencia del corpus,
+                                          arma el dataset de fine-tuning
+            │
+PASO 3  notebook_voicelegacy_finetune →  entrena XTTS-v2 con esa voz limpia
+                                          y compara A/B contra el base
+            │
+PASO 4  usar el checkpoint            →  genera voz nueva en cualquier texto
+```
+
+Por qué dos librerías: speakerscribe responde "¿quién habló y cuándo?"
+(diarización); voicelegacy responde "aprende y recrea esa voz". Las etiquetas
+de hablante (`SPEAKER_00`, `SPEAKER_01`) NO son consistentes entre archivos
+—la diarización es por-archivo— así que en el PASO 2 identificas a tu persona
+una vez por entrevista. El notebook puente reproduce una muestra de cada
+hablante para que la identifiques de oído, y luego **valida con Resemblyzer que
+todo el corpus es realmente la misma voz** antes de entrenar (detecta si
+etiquetaste mal alguna entrevista).
+
+### Pre-requisitos comunes
+
+- Cuenta de Google (Colab + Drive).
+- Token de HuggingFace gratuito (lo pide pyannote, el motor de diarización de
+  speakerscribe): https://huggingface.co/settings/tokens
+- Aceptar la Coqui Public Model License: https://coqui.ai/cpml
+- Material: para fine-tuning, 2-5 horas de voz NETA del hablante dan calidad de
+  legado. 30 min es el mínimo viable (calidad limitada). Menos de 15 min no
+  alcanza.
+
+### Cuánto material necesitas (regla rápida)
+
+| Voz neta del hablante | Resultado esperado |
+|---|---|
+| < 15 min | Insuficiente. El fine-tuning no ayuda. |
+| 15–30 min | Funciona, calidad limitada. |
+| 30 min – 2 h | Buena. |
+| 2–5 h | Ideal. Calidad de legado. |
+
+### Instalación (para usar la API en código, fuera de los notebooks)
+
+```bash
+pip install voicelegacy                 # núcleo
+pip install voicelegacy[similarity]     # + Resemblyzer (similarity + coherencia)
+pip install voicelegacy[finetune]       # + faster-whisper (notebook standalone)
+pip install voicelegacy[all]            # todo lo opcional
+```
+
+### Documentos guía
+
+- `docs/PROCESO_COMPLETO_ENTREVISTAS.md` — explicación desde cero del Camino 2.
+- `docs/PLAYBOOK_FINETUNING_30MIN.md` — paso a paso del Camino 1.
+- `docs/FINETUNING_GUIDE.md` — cuándo conviene fine-tunear y cuándo no.
+
 ## What the pipeline does
 
 1. Reads `speakerscribe` JSON diarization output.

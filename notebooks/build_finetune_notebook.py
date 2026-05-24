@@ -278,80 +278,28 @@ Esta celda hace dos cosas:
 """
     ),
     _code(
-        """import json, shutil, csv, random
-import soundfile as sf
+        """# El emparejamiento WAV<->texto lo hace el paquete leyendo los sidecars .txt
+# que voicelegacy escribe junto a cada WAV en reference_corpus/. NO se parsean
+# nombres de archivo (eso causaba un dataset vacío en versiones previas).
+from voicelegacy.finetune_dataset import build_finetune_dataset
 
-random.seed(42)
+ds = build_finetune_dataset(
+    reference_corpus=REFERENCE_CORPUS,
+    dataset_dir=DATASET_DIR,
+    speaker_name="target_speaker",
+)
+print(f"WAVs aceptados : {ds.n_total}")
+print(f"Train / Eval   : {ds.n_train} / {ds.n_eval}")
+if ds.n_skipped_no_text:
+    print(f"Sin sidecar .txt (omitidos): {ds.n_skipped_no_text}")
 
-# Cargar TODOS los JSONs de speakerscribe y construir un índice
-# (filename_stem → texto) tomando solo segmentos del speaker objetivo.
-SPEAKER_LABEL = "SPEAKER_00"  # confirma con `voicelegacy list-speakers`
-
-text_index = {}  # filename stem → texto
-
-for json_path in SPEAKERSCRIBE_OUT.glob("*.json"):
-    data = json.loads(json_path.read_text(encoding="utf-8"))
-    source_stem = json_path.stem
-    for seg in data.get("segments", []):
-        if seg.get("speaker") != SPEAKER_LABEL:
-            continue
-        # voicelegacy build-corpus nombra los WAVs como <source_stem>_seg<idx>.wav
-        # Reconstruimos el nombre esperado.
-        idx = seg.get("seg_idx") or seg.get("idx")
-        if idx is None:
-            continue
-        text = (seg.get("text") or "").strip()
-        if not text or len(text) < 10:
-            continue
-        wav_stem = f"{source_stem}_seg{idx:04d}"
-        text_index[wav_stem] = text
-
-print(f"Índice texto construido: {len(text_index)} entries con speaker={SPEAKER_LABEL}")
-
-# Copiar WAVs y construir filas (audio_name|text|speaker)
-rows = []
-skipped_no_text = 0
-skipped_too_long = 0
-for wav in sorted(REFERENCE_CORPUS.glob("*.wav")):
-    info = sf.info(str(wav))
-    if info.duration > MAX_AUDIO_LENGTH_S:
-        skipped_too_long += 1
-        continue
-    text = text_index.get(wav.stem)
-    if text is None:
-        skipped_no_text += 1
-        continue
-    dest = DATASET_DIR / "wavs" / wav.name
-    if not dest.exists():
-        shutil.copy(str(wav), str(dest))
-    rows.append((f"wavs/{wav.name}", text, SPEAKER_LABEL))
-
-print(f"\\nWAVs aceptados   : {len(rows)}")
-print(f"Skip (sin texto) : {skipped_no_text}")
-print(f"Skip (> {MAX_AUDIO_LENGTH_S}s) : {skipped_too_long}")
-
-if len(rows) < 30:
+if ds.n_total < 30:
     raise RuntimeError(
-        f"Solo {len(rows)} WAVs aceptados. Fine-tuning requiere ≥30, "
-        f"idealmente ≥200. Verifica el SPEAKER_LABEL y que speakerscribe "
-        f"haya producido transcripciones para los segmentos del corpus."
+        f"Solo {ds.n_total} WAVs con transcripción. Fine-tuning quiere >=30 "
+        f"(idealmente >=200). Verifica que el reference_corpus tenga sidecars "
+        f".txt (voicelegacy >= 0.3.4) y que el corpus se construyó del hablante "
+        f"correcto."
     )
-
-# 90/10 split
-random.shuffle(rows)
-cut = int(len(rows) * 0.9)
-train_rows, eval_rows = rows[:cut], rows[cut:]
-
-def write_csv(path, rows):
-    with path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f, delimiter="|")
-        w.writerow(["audio_file", "text", "speaker_name"])  # header
-        w.writerows(rows)
-
-write_csv(DATASET_DIR / "metadata_train.csv", train_rows)
-write_csv(DATASET_DIR / "metadata_eval.csv",  eval_rows)
-
-print(f"Train: {len(train_rows)}  |  Eval: {len(eval_rows)}")
 print(f"Dataset listo en {DATASET_DIR}")"""
     ),
     # ─── Sección 6: Configurar trainer ────────────────────────────────

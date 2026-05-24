@@ -9,6 +9,118 @@ Versioning: [Semantic Versioning](https://semver.org/)
 - P3-27 (tabla SNR fuente → similarity esperada): experimento empírico con audio real pendiente. Bloqueante para v1.0; no bloqueante para v0.3.0 que aporta valor de ingeniería independiente.
 - P3-31 (Polars/DuckDB): no aplica al volumen actual (1-3 entrevistas).
 
+## [0.4.0] — 2026-05-24 — Turno 14 · correcciones de auditoría (bug crítico, coherencia, defaults)
+
+Salto MINOR (0.3.3 → 0.4.0): API pública nueva + cambios de comportamiento en defaults de limpieza. Atiende los hallazgos críticos de la auditoría externa de v0.3.3.
+
+### Fixed
+
+- **Bug crítico criterio 6 (WAV↔texto roto).** El notebook `notebook_voicelegacy_finetune.ipynb` emparejaba WAVs con transcripciones usando el patrón `{source_stem}_seg{idx:04d}`, que NO coincide con el patrón real que escribe `extract_segments_to_wav` (`{stem}_{idx:04d}_{start:08.2f}`). Resultado: `text_index.get(wav.stem)` devolvía `None` siempre → dataset vacío → `RuntimeError`. **Solución de raíz:** `extract_segments_to_wav` ahora escribe un sidecar `.txt` con la transcripción junto a cada WAV, y la nueva función `build_finetune_dataset` empareja leyendo el sidecar adyacente (no parsea nombres). Reproducido y verificado con un test de integración.
+
+### Added
+
+- **Módulo `voicelegacy.finetune_dataset`** (109 LOC, 96.2% cobertura):
+  - `build_finetune_dataset(reference_corpus, dataset_dir, ...)` → arma el dataset LJSpeech-like leyendo los sidecars `.txt`. Robusto por construcción. Devuelve `DatasetBuildResult` con conteos y diagnóstico de descartes.
+  - `validate_corpus_coherence(reference_corpus, threshold=0.70, ...)` → **criterio 19**: embebe cada WAV con Resemblyzer y marca clips cuya similitud al centroide cae bajo el umbral. Detecta contaminación silenciosa cuando una entrevista se etiquetó al hablante equivocado en el flujo manual del bridge. Devuelve `CoherenceResult` con outliers y veredicto.
+- **Sidecar de transcripción** (`.txt`) escrito junto a cada WAV por `extract_segments_to_wav`.
+- **Celda 6.bis en el notebook bridge**: valida coherencia del corpus con Resemblyzer ANTES del dataset, con guía de qué hacer si hay outliers. Escribe `reports/coherence_report.json`.
+- **20 tests nuevos** (`test_finetune_dataset.py`), incluido el **test de integración corpus→dataset** (criterio 9) que reproduce y previene la regresión del criterio 6: extrae un corpus real con `extract_segments_to_wav`, arma el dataset, y afirma que NO está vacío + que el interlocutor fue excluido. Total: 238 tests (era 220).
+
+### Changed (cambios de comportamiento en defaults — criterios 1 y 3)
+
+- **`bandpass high_hz` 7600 → 10000 Hz**: 7600 cortaba armónicos altos clave para el timbre; XTTS-v2 emite a 24 kHz.
+- **Orden de limpieza en `extract_segments_to_wav`**: ahora `denoise → bandpass → preemphasis` (antes `bandpass → preemphasis → denoise`). noisereduce estima el perfil de ruido del espectro completo; filtrar antes lo privaba de información.
+- **`target_loudness_lufs` -23 → -20**: -23 (broadcast EBU) está por debajo del rango de entrenamiento de XTTS-v2 (~-23 a -18); -20 queda dentro.
+- **`min_segment_duration_s` 4.0 → 6.0**: consistencia con `MIN_REF_DURATION_S=6.0` y el mínimo recomendado de XTTS-v2 para contexto prosódico.
+- **`top_n_segments` 10 → 5**: pocas referencias excelentes superan a muchas mediocres.
+- **`notebook_voicelegacy_finetune.ipynb` y bridge** ahora usan `build_finetune_dataset` (función del paquete) en vez de emparejamiento frágil por nombre.
+
+### CI (criterio 11)
+
+- El workflow ahora regenera y valida los **4 notebooks** (antes solo el principal): loop sobre todos los `build_*.py` + schema + hook anti-bomba sobre cada `.ipynb`.
+
+### Verified
+
+- Bug criterio 6 reproducido (patrón viejo nunca coincide) y corregido (test de integración pasa, dataset no vacío, interlocutor excluido).
+- `validate_corpus_coherence` detecta contaminación: test con 3 clips de un hablante + 1 ortogonal → marca el outlier, `is_coherent=False`.
+- 238 tests verdes, cobertura 86.51% (subió desde 85.90%), `finetune_dataset.py` 96.2%.
+- ruff check + format limpios; los 4 notebooks: 0 errores de sintaxis (IPython transformer), schema + anti-bomba OK.
+- `python -m build` + `twine check` → PASSED para 0.4.0.
+
+### Not in this release (límites honestos que siguen)
+
+- **Criterio 10 (validación empírica con audio real):** sigue pendiente. Los tests usan audio sintético; nadie ha medido aún `speaker_similarity_score` baseline vs cleanup vs finetune con material real. Es trabajo de Colab con GPU + material del usuario, no de CI.
+- Criterios 2 (presets de hiperparámetros legacy vs expresivo) y 4 (renombrar `snr_db`→`dynamic_range_db` en API pública) quedan como mejoras futuras documentadas.
+
+## [0.3.3] — 2026-05-23 — Turno 13 · notebooks conformes a las skills de Colab
+
+Salto PATCH (0.3.2 → 0.3.3): reescritura del notebook puente y mejoras de gestión de memoria en el standalone para cumplir las skills `colab-notebook-dev` y `python-data-library-dev`. Sin cambios en la API del paquete.
+
+### Changed
+
+- **`notebook_voicelegacy_bridge.ipynb` reescrito** siguiendo las skills:
+  - **Estructura EXTRAS/EJECUTAR** (skill §4): una celda EXTRAS con imports + `@dataclass BridgeConfig` + todas las funciones; celdas EJECUTAR de pocas líneas con solo variables de usuario + una llamada.
+  - **Disciplina de RAM (skill §8, lo más crítico):** el notebook anterior cargaba la entrevista COMPLETA a RAM (`sf.read(str(audio_path))`) solo para reproducir 12 s — con 10+ horas de entrevistas esto reventaba los 12 GB de Colab Free. Ahora usa **lectura parcial desde disco** (`leer_fragmento` con `soundfile` seek start/stop): una entrevista de 1 hora cuesta la misma RAM que una de 12 s. Verificado: lee solo el 18% del archivo para una muestra.
+  - **Checkpointing por entrevista (skill §6):** `bridge_manifest.json` registra qué entrevistas ya se extrajeron; re-correr salta las hechas. Sobrevive a sesión Colab cortada. Verificado idempotente.
+  - **Liberación de RAM entre entrevistas:** `gc.collect()` tras cada una; monitoreo con `psutil` y aviso al 85%.
+  - **Config centralizada `@dataclass` (skill §1):** `BridgeConfig` con `__post_init__` validation, cero magic numbers (umbrales de minutos, SNR, preview, RAM warn todos en la config).
+  - **Observabilidad (skill §5):** progreso `[i/total]`, resumen de composición por entrevista, monitoreo de RAM.
+  - **Metadata de reproducibilidad (skill §12):** `bridge_metadata.json` con config + stats + python_version.
+- **`notebook_voicelegacy_finetune_standalone.ipynb`:** añadida liberación explícita del audio completo (`del audio_full; gc.collect()`) tras la segmentación, progreso `🔄 segmento i/total`, y comentario que justifica por qué para UN archivo con segmentación densa cargar una vez es defendible (vs el bridge que lee dispersamente de muchos archivos largos y por eso usa lectura parcial).
+
+### Verified
+
+- 4 tests end-to-end del flujo del bridge ejecutados con datos sintéticos: (1) lectura parcial lee solo el fragmento pedido (18% del archivo, no 100%); (2) extracción filtra al interlocutor (`Kept N/M segments for SPEAKER_00`); (3) checkpointing idempotente (re-correr salta las hechas); (4) metadata de reproducibilidad guardada.
+- La celda EXTRAS ejecuta como módulo real; `BridgeConfig.__post_init__` rechaza valores inválidos.
+- 220 tests verdes, cobertura 85.90%, ruff check + format limpios, los 4 notebooks pasan schema + anti-bomba.
+- `python -m build` + `twine check` → PASSED para 0.3.3.
+
+### Documented
+
+- `docs/PROCESO_COMPLETO_ENTREVISTAS.md` actualizado con la sección de gestión de memoria (por qué no se carga el audio completo, checkpointing, reanudación).
+
+## [0.3.2] — 2026-05-23 — Turno 12 · notebook puente speakerscribe → voicelegacy
+
+Salto PATCH (0.3.1 → 0.3.2): nuevo notebook de enlace para el caso real de muchas entrevistas con varios hablantes. Sin cambios en la API del paquete.
+
+### Added
+
+- **Notebook `notebooks/notebook_voicelegacy_bridge.ipynb`** (19 celdas, regenerable desde `build_bridge_notebook.py`). Conecta la salida de speakerscribe (entrevistas diarizadas con varias personas) con voicelegacy (corpus de un solo hablante). Resuelve el problema de que las etiquetas `SPEAKER_xx` de speakerscribe NO son consistentes entre archivos (la diarización es por-archivo): incluye una celda de identificación asistida por audio (reproduce una muestra de cada hablante por entrevista) y un mapa `TARGET_SPEAKER_MAP` por entrevista. Recorta + limpia solo los segmentos del hablante objetivo de todas las entrevistas, consolida en un `reference_corpus/` único, y opcionalmente construye el dataset LJSpeech-like para fine-tuning emparejando cada WAV con su transcripción.
+
+### Verified
+
+- Compatibilidad speakerscribe → voicelegacy confirmada ejecutando código real: el schema Pydantic de voicelegacy (`extra="allow"`) parsea el JSON de speakerscribe con todas sus claves (`audio_file`, `language_detected`, `segments[].start/end/text/speaker`, más claves extra `id`, `speaker_overlap_s`, `words`).
+- Cadena de extracción probada end-to-end con JSON + WAV sintéticos: `filter_segments(target_speaker="SPEAKER_00")` descartó al interlocutor (`SPEAKER_01`) y extrajo solo los segmentos del objetivo. Log: `Kept 3/4 segments for speaker 'SPEAKER_00'`.
+- Las 19 celdas de código validadas con el `TransformerManager` de IPython (cero errores de sintaxis).
+- 220 tests verdes, cobertura 85.90%, ruff check + format limpios, los 4 notebooks pasan schema + anti-bomba.
+
+### Documented
+
+- `docs/PROCESO_COMPLETO_ENTREVISTAS.md`: explicación desde cero del flujo de 2 librerías (speakerscribe diariza, voicelegacy clona), por qué el audio debe estar aislado, por qué las etiquetas varían entre archivos, y el paso a paso completo.
+
+## [0.3.1] — 2026-05-19 — Turno 11 · fine-tuning standalone desde grabación cruda
+
+Salto PATCH (0.3.0 → 0.3.1): nuevo notebook autónomo + extra opcional `finetune`. Sin cambios en la API del paquete; el código Python es idéntico a 0.3.0.
+
+### Added
+
+- **Notebook `notebooks/notebook_voicelegacy_finetune_standalone.ipynb`** (27 celdas, regenerable desde `build_finetune_standalone_notebook.py`). A diferencia de `notebook_voicelegacy_finetune.ipynb` (que requiere `reference_corpus/` + transcripciones de speakerscribe), este parte de **UNA grabación cruda** (mp3/m4a/wav/mp4) y hace todo: conversión a 22.05 kHz mono, transcripción con faster-whisper (word timestamps + VAD), segmentación inteligente en clips de 2-11 s por pausas/oraciones, limpieza con `voicelegacy.audio` (denoise + bandpass + loudness), construcción del dataset LJSpeech-like, fine-tuning del GPT encoder, materialización del checkpoint y A/B contra el base.
+- **Extra opcional `finetune`** en `pyproject.toml`: `pip install voicelegacy[finetune]` añade `faster-whisper>=1.0,<2.0`. Incluido también en el meta-extra `all`.
+- **Hyperparams calibrados para dataset pequeño** (15-25 min de voz neta, lo que rinde una grabación de 30 min tras quitar silencios): `NUM_EPOCHS=10` (vs 6), `LEARNING_RATE=3e-6` (vs 5e-6, anti catastrophic-forgetting), `WEIGHT_DECAY=5e-2` (vs 1e-2, regularización fuerte anti-overfit).
+
+### Verified
+
+- 220 tests verdes (sin cambios — el notebook no toca código del paquete)
+- Cobertura 85.90%, piso 80%
+- ruff check + format limpios sobre voicelegacy/ tests/ scripts/ notebooks/
+- Las 27 celdas de código del notebook standalone validadas con el `TransformerManager` de IPython (cero errores de sintaxis incluyendo magics `!` y `=!`)
+- Schema nbformat v4.5 + hook anti-bomba pasan en los 3 notebooks
+- `python -m build` + `twine check` → PASSED para 0.3.1
+
+### Documented
+
+- `docs/PLAYBOOK_FINETUNING_30MIN.md`: guía paso a paso completa para fine-tunear desde una grabación de 30 min, con la advertencia honesta de que 30 min es el límite inferior (no el ideal de 2-5 h).
+
 ## [0.3.0] — 2026-05-19 — Turno 10 · fine-tuning XTTS-v2
 
 Salto MINOR (0.2.0 → 0.3.0) por feature pública nueva backward-compatible: módulo `voicelegacy.finetuned_inference` para cargar y usar checkpoints XTTS-v2 fine-tuneados. El paquete sigue funcionando idénticamente sin él — la nueva ruta es opt-in.
